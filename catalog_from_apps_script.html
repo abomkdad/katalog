@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAD | קטלוג מ־Apps Script (PDF)</title>
+<style>
+  :root{--gap:12px;--radius:18px;--ring:#e6e6e6;--accent:#111;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#fafafa;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans Hebrew','Noto Kufi Arabic','Noto Sans Arabic',Tahoma,Arial,sans-serif;color:#111}
+  .wrap{max-width:1120px;margin:0 auto;padding:16px}
+  header{position:sticky;top:0;background:#fafafa;padding:12px 0;z-index:10;border-bottom:1px solid var(--ring)}
+  h1{margin:0 0 8px;font-size:20px}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  button,select,input{padding:10px 14px;border-radius:12px;border:1px solid var(--ring);background:white;cursor:pointer}
+  button.primary{background:#111;color:#fff;border-color:#111}
+  #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--gap);margin-top:14px}
+  .card{background:white;border:1px solid var(--ring);border-radius:var(--radius);padding:12px;break-inside:avoid;page-break-inside:avoid}
+  .imgbox{aspect-ratio:1/1.0;background:#f1f1f1;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+  .imgbox img{width:100%;height:100%;object-fit:cover}
+  .name{font-weight:700;margin:6px 0}
+  .sku{opacity:.7;font-size:12px}
+  .desc{opacity:.9;font-size:14px;margin-top:4px;min-height:36px}
+  .price{font-weight:800;margin-top:8px}
+  .cat{font-size:12px;opacity:.7;margin-top:2px}
+  .note{font-size:12px;opacity:.7;margin-top:6px}
+  @page{size:A4;margin:12mm}
+  @media print{
+    header,.no-print{display:none !important}
+    body{background:white}
+    #grid{grid-template-columns:repeat(3, 1fr)}
+  }
+</style>
+</head>
+<body>
+  <header class="no-print">
+    <div class="wrap">
+      <h1>קטלוג — Apps Script JSON</h1>
+      <div class="controls">
+        <button class="primary" onclick="window.print()">שמירה כ-PDF</button>
+        <input id="q" placeholder="חיפוש שם/תיאור/מק&quot;ט">
+        <select id="cat"><option value="">כל הקטגוריות</option></select>
+        <span id="count"></span>
+      </div>
+      <div class="note">
+        API: <code id="api"></code> • טיפ: ערכו את המשתנה <code>API_URL</code> בקובץ זה לכתובת ה-Web App.
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div id="grid"></div>
+  </main>
+
+<script>
+// ===== CONFIG =====
+// Paste your deployed Web App URL (ends with /exec)
+const API_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
+
+function currencyFormat(s){
+  if (!s) return '';
+  const num = parseFloat(String(s).replace(/[^0-9.\-]/g,''));
+  if (isNaN(num)) return s;
+  return '₪ ' + num.toFixed(num % 1 ? 2 : 0);
+}
+
+function fixImageUrl(s){
+  if (!s) return '';
+  let url = String(s).trim().split(/[\s,;]+/)[0];
+  const m1 = url.match(/drive\.google\.com\/file\/d\/([\w-]+)\/view/);
+  const m2 = url.match(/drive\.google\.com\/open\?id=([\w-]+)/);
+  const m3 = url.match(/drive\.google\.com\/uc\?id=([\w-]+)/);
+  if (m1) url = `https://drive.google.com/uc?export=view&id=${m1[1]}`;
+  else if (m2) url = `https://drive.google.com/uc?export=view&id=${m2[1]}`;
+  else if (m3) url = `https://drive.google.com/uc?export=view&id=${m3[1]}`;
+  if (!/^https?:/i.test(url) && /^[\w.-]+\/.+/.test(url)) url = 'https://' + url;
+  return url.replace(/ /g,'%20');
+}
+
+(async function(){
+  document.getElementById('api').textContent = API_URL || '(לא הוגדר)';
+
+  if (!API_URL || API_URL.includes('PASTE_YOUR_WEB_APP_URL_HERE')){
+    document.body.innerHTML = '<div style="padding:24px;max-width:780px;margin:0 auto;font-family:system-ui">שגיאה: לא הוגדר API_URL בקובץ.</div>';
+    return;
+  }
+
+  const resp = await fetch(API_URL);
+  if (!resp.ok){
+    document.body.innerHTML = '<div style="padding:24px;max-width:780px;margin:0 auto;font-family:system-ui">שגיאה: ' + resp.status + ' ' + resp.statusText + '</div>';
+    return;
+  }
+  const data = await resp.json();
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  // Categories
+  const cats = [...new Set(items.map(x => (x.category||'').trim()).filter(Boolean))].sort();
+  const catSel = document.getElementById('cat');
+  cats.forEach(c => { const o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o); });
+
+  const grid = document.getElementById('grid');
+  const q = document.getElementById('q');
+  const count = document.getElementById('count');
+
+  function norm(s){return (s||'').toString().toLowerCase();}
+  function render(){
+    const term = norm(q.value);
+    const catv = catSel.value;
+    let list = items;
+    if (catv) list = list.filter(x => (x.category||'') === catv);
+    if (term) list = list.filter(x => norm(x.name).includes(term) || norm(x.desc).includes(term) || norm(x.sku).includes(term));
+
+    count.textContent = `סה"כ פריטים: ${list.length}`;
+    grid.innerHTML = list.map(x => `
+      <div class="card">
+        <div class="imgbox">
+          ${x.image ? `<img src="${fixImageUrl(x.image)}" alt="" loading="lazy" onerror="this.replaceWith(document.createTextNode('תמונה'))">` : `<span>תמונה</span>`}
+        </div>
+        <div class="name">${x.name || ''}</div>
+        ${x.sku ? `<div class="sku">מק&quot;ט: ${x.sku}</div>` : ''}
+        ${x.category ? `<div class="cat">${x.category}</div>` : ''}
+        ${x.desc ? `<div class="desc">${x.desc}</div>` : `<div class="desc"></div>`}
+        ${x.price ? `<div class="price">${currencyFormat(x.price)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+  q.addEventListener('input', render);
+  catSel.addEventListener('change', render);
+  render();
+})().catch(err => {
+  document.body.innerHTML = '<div style="padding:24px;max-width:780px;margin:0 auto;font-family:system-ui">שגיאה: ' + err.message + '</div>';
+});
+</script>
+</body>
+</html>
