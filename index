@@ -79,7 +79,7 @@ function fixImageUrl(s){
 (async function(){
   document.getElementById('api').textContent = API_URL || '(לא הוגדר)';
 
-  if (!API_URL || API_URL.includes('PASTE_YOUR_WEB_APP_URL_HERE')){
+  if (!API_URL || API_URL.includes('https://docs.google.com/spreadsheets/d/1g3_D2NBwT27O2OI-v1R5tAB2QCfF3_ZCUL9sSLoCv54/edit?usp=sharing')){
     document.body.innerHTML = '<div style="padding:24px;max-width:780px;margin:0 auto;font-family:system-ui">שגיאה: לא הוגדר API_URL בקובץ.</div>';
     return;
   }
